@@ -14,6 +14,7 @@ import shutil
 import mimetypes
 import subprocess
 import threading
+import webbrowser
 from pathlib import Path
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -1114,6 +1115,22 @@ mimetypes.add_type('audio/ogg', '.ogg')
 app = Flask(__name__, template_folder=str(Path(__file__).resolve().parent / 'templates'))
 app.config['JSON_AS_ASCII'] = False
 
+# [打包专用] PyInstaller 冻结后, 资源实际位于 sys._MEIPASS(onedir 下即 _internal/),
+# 而本文件用 __file__ 推导的路径会指向顶层目录, 导致模板/曲库/UI态找不到。
+# 冻结态下统一改指 _MEIPASS; 开发态(python 直接运行)完全不受影响。
+if getattr(sys, 'frozen', False):
+    _MEI = Path(getattr(sys, '_MEIPASS', str(Path(__file__).resolve().parent.parent)))
+    BASE_DIR = _MEI
+    DOWNLOAD_DIR = _MEI / 'downloads'
+    ETHNOS_CACHE_DIR = _MEI / 'webui' / 'ethnos_cache'
+    SINGER_CACHE_DIR = ETHNOS_CACHE_DIR / 'singers'
+    UI_STATE_PATH = _MEI / 'webui' / 'ui_state.json'
+    app.template_folder = str(_MEI / 'webui' / 'templates')
+    app._jinja_env = None  # 强制下次访问按新 template_folder 重建加载器
+    print(f'[mountainriverechoes][frozen] _MEIPASS={_MEI}', flush=True)
+    print(f'[mountainriverechoes][frozen] templates={app.template_folder}', flush=True)
+    print(f'[mountainriverechoes][frozen] ethnos_cache={ETHNOS_CACHE_DIR}', flush=True)
+
 state_lock = threading.Lock()
 clients_cache = {}
 search_sessions = OrderedDict()   # sid -> {'client', 'items': {'Source#idx': SongInfo}}
@@ -1447,7 +1464,21 @@ def _bili_watch_url(song):
                 if r:
                     return r
         return None
-    return dig(getattr(song, 'raw_data', None) or {})
+    watch = dig(getattr(song, 'raw_data', None) or {})
+    if watch:
+        return watch
+    # 存量曲库(打包版)为压体积只保留了精简字段: raw_data 为空, 递归查找必然落空。
+    # 但曲库把 BV 号存在 album 列、av 号(纯数字 aid)存在 identifier —— 直接按它们还原视频页,
+    # 不依赖 raw_data; 否则 B站那批歌会因为拿不到视频页而落到已过期的 CDN 直链上必然 403。
+    alb = str(getattr(song, 'album', '') or '').strip()
+    if re.fullmatch(r'BV[0-9A-Za-z]{10}', alb):
+        return f'https://www.bilibili.com/video/{alb}'
+    if re.fullmatch(r'(?i)av\d+', alb):
+        return f'https://www.bilibili.com/video/{alb.lower()}'
+    ident = str(getattr(song, 'identifier', '') or '').strip()
+    if re.fullmatch(r'\d+', ident):
+        return f'https://www.bilibili.com/video/av{ident}'
+    return None
 
 
 def _weixin_video_self_heal(article_url, voice_id):
@@ -1625,10 +1656,15 @@ def _netease_reissue_url(song):
     """网易云直链续签: 电台/DJ音频与部分歌曲的 download_url 内嵌签发时间戳, 约40分钟即 403。
     会话对象以 identifier 保存网易云歌曲 id —— 直接调官方 URL API 重新签发, 优先于跨源重搜。"""
     with suppress(Exception):
-        if str(song.source or '').removesuffix('MusicClient') != 'Netease':
-            return None
+        src = str(song.source or '').removesuffix('MusicClient')
         nid = str(getattr(song, 'identifier', '') or '')
         if not nid.isdigit():
+            return None
+        # MyFreeMP3 / 音乐库(Yinyueku) 这类聚合源背后其实就是网易云: identifier 存的正是网易云歌曲 id,
+        # 直链域名也是 music.126.net —— 同样几十小时即失效。以前只给 source=='Netease' 续签,
+        # 这批歌(白族库 70 首)就只剩「跨源重搜」一条路, 而重搜基本搜不到同名民族曲, 表现为点了不出声。
+        _u = song.download_url if isinstance(song.download_url, str) else ''
+        if src != 'Netease' and 'music.126.net' not in _u and 'music.163.com' not in _u:
             return None
         r = requests.get('https://music.163.com/api/song/enhance/player/url',
                          params={'ids': f'[{nid}]', 'br': 320000},
@@ -4001,4 +4037,7 @@ if __name__ == '__main__':
             if _hp.get('partial'):
                 print('[mountainriverechoes] resuming han folk build', flush=True)
                 threading.Timer(8.0, lambda: threading.Thread(target=build_han_folk, daemon=True).start()).start()
+    # [打包专用] 仅当被 PyInstaller 冻结成 exe 时, 启动后自动打开浏览器; 开发态(python 直接跑)完全不受影响
+    if getattr(sys, 'frozen', False):
+        threading.Timer(1.5, lambda: webbrowser.open(f'http://{HOST}:{PORT}')).start()
     app.run(host=HOST, port=PORT, threaded=True)

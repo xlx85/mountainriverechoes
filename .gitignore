@@ -8,7 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+build/*
 develop-eggs/
 dist/
 downloads/
@@ -120,3 +120,22 @@ probe_weixin*.py
 # 本地工具会话数据(ZCode / WorkBuddy)
 .zcode/
 .workbuddy/
+
+# === 白族专属版(2026-10-11) ===
+# PyInstaller 产生的中间目录与成品目录: 体积大(单文件最大 65MB), 不入版本控制
+# 注意: 上面 build/ 已改为 build/*, 以便单独放行本次实践的打包脚本(见下)
+build_*/
+dist_*/
+build_setup*/
+打包成果/
+# 构建日志
+build_log*.txt
+build_setup*.log
+build_setup*_log*.txt
+run_*.txt
+
+# 放行: 本次实践的打包脚本 / 构建配置 / 安装说明(作业可复核材料)
+!build/*.py
+!build/*.txt
+!MountainRiverEchoes-白族版.spec
+!MountainRiverEchoes-白族版-Setup.spec
