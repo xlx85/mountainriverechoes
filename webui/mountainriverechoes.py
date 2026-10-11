@@ -187,6 +187,8 @@ ETHNIC_EXTRA_KW['回族'] = ETHNIC_EXTRA_KW.get('回族', []) + [
 ]
 ETHNIC_GROUPS = []
 for _i, _name in enumerate(ETHNIC_BASE):
+    if _name != '白族':   # 白族专属版：仅保留白族(e12)，其余民族不进入导航
+        continue
     _kws = [f'{_name}民歌', f'{_name}歌曲'] + ETHNIC_EXTRA_KW.get(_name, []) + ETHNIC_ARTISTS.get(_name, [])
     ETHNIC_GROUPS.append({'key': f'e{_i:02d}', 'name': _name, 'kws': _kws, 'ci': _i % 10})
 # 汉族民间小调: 各省市民间小调搜索词(与民族音乐严格区分)

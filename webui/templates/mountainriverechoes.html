@@ -2336,7 +2336,8 @@ function renderEthnos(){
     const ethOrder = store.get('cm_order_ethcards', ETHCARD_ORDER_DEFAULT) || [];
     const eIdx = new Map(ethOrder.map((n, i) => [n, i]));
     const cardKeyOf = nm => (nm === '汉族' ? '汉族民间小调' : nm);
-    const zoneCards = [...groups.map(g => ({ nm: g.name, html: ethCardHTML(g) })), { nm: '汉族民间小调', html: hanCard }]
+    const zoneCards = [...groups.map(g => ({ nm: g.name, html: ethCardHTML(g) })),
+        ...(state.ethnos.hanDone ? [{ nm: '汉族民间小调', html: hanCard }] : [])]
       .sort((a, b) => ((eIdx.get(cardKeyOf(a.nm)) ?? 1e9) - (eIdx.get(cardKeyOf(b.nm)) ?? 1e9)));
     grid.innerHTML = zoneCards.map(c => c.html).join('') || '<div class="empty">加载中...</div>';
     const hc = grid.querySelector('.eth-card[data-k="han"]');
